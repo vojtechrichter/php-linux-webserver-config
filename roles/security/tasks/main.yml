@@ -1,0 +1,141 @@
+---
+# ── Timezone ──────────────────────────────────────────────────────────────────
+- name: Set system timezone
+  timezone:
+    name: "{{ system_timezone }}"
+
+# ── Packages ──────────────────────────────────────────────────────────────────
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Upgrade all packages
+  apt:
+    upgrade: dist
+
+- name: Install essential packages
+  apt:
+    name:
+      - ufw
+      - fail2ban
+      - unattended-upgrades
+      - logrotate
+      - curl
+      - wget
+      - git
+      - htop
+      - vim
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - apt-transport-https
+      - software-properties-common
+    state: present
+
+# ── Deploy user ───────────────────────────────────────────────────────────────
+- name: Create deploy user
+  user:
+    name: "{{ deploy_user }}"
+    shell: /bin/bash
+    groups: sudo
+    append: yes
+    create_home: yes
+
+- name: Set authorized key for deploy user
+  authorized_key:
+    user: "{{ deploy_user }}"
+    state: present
+    key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+
+- name: Allow deploy user passwordless sudo
+  lineinfile:
+    path: /etc/sudoers.d/{{ deploy_user }}
+    line: "{{ deploy_user }} ALL=(ALL) NOPASSWD:ALL"
+    create: yes
+    validate: visudo -cf %s
+    mode: '0440'
+
+# ── SSH hardening ─────────────────────────────────────────────────────────────
+- name: Harden SSH configuration
+  template:
+    src: sshd_config.j2
+    dest: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: '0600'
+    validate: sshd -t -f %s
+  notify: Restart SSH
+
+# ── Firewall (UFW) ────────────────────────────────────────────────────────────
+- name: Set UFW default policies
+  ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - { direction: incoming, policy: deny }
+    - { direction: outgoing, policy: allow }
+
+- name: Allow configured ports
+  ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+  loop: "{{ ufw_allowed_ports }}"
+
+- name: Allow SSH from specific IPs only
+  ufw:
+    rule: allow
+    src: "{{ item }}"
+    port: "{{ ssh_port }}"
+    proto: tcp
+  loop: "{{ allowed_ssh_ips }}"
+  when: allowed_ssh_ips | length > 0
+
+- name: Enable UFW
+  ufw:
+    state: enabled
+
+# ── Fail2ban ──────────────────────────────────────────────────────────────────
+- name: Deploy fail2ban jail config
+  template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart fail2ban
+
+- name: Enable and start fail2ban
+  service:
+    name: fail2ban
+    enabled: yes
+    state: started
+
+# ── Unattended upgrades ───────────────────────────────────────────────────────
+- name: Enable unattended-upgrades
+  copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::AutocleanInterval "7";
+    mode: '0644'
+
+# ── Kernel / sysctl hardening ─────────────────────────────────────────────────
+- name: Apply sysctl security settings
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  loop:
+    - { key: net.ipv4.conf.all.accept_redirects,       value: "0" }
+    - { key: net.ipv4.conf.default.accept_redirects,   value: "0" }
+    - { key: net.ipv4.conf.all.send_redirects,         value: "0" }
+    - { key: net.ipv4.conf.all.accept_source_route,    value: "0" }
+    - { key: net.ipv4.conf.all.log_martians,           value: "1" }
+    - { key: net.ipv4.icmp_echo_ignore_broadcasts,     value: "1" }
+    - { key: net.ipv4.tcp_syncookies,                  value: "1" }
+    - { key: net.ipv6.conf.all.accept_redirects,       value: "0" }
+    - { key: kernel.randomize_va_space,                value: "2" }

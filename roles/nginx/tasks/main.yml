@@ -1,0 +1,71 @@
+---
+- name: Install Nginx
+  apt:
+    name: nginx
+    state: present
+    update_cache: yes
+
+- name: Ensure directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - /etc/nginx/sites-available
+    - /etc/nginx/sites-enabled
+    - /etc/nginx/snippets
+
+- name: Deploy nginx.conf
+  template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/nginx.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload Nginx
+
+- name: Deploy security snippet
+  template:
+    src: snippets/security.conf.j2
+    dest: /etc/nginx/snippets/security.conf
+  notify: Reload Nginx
+
+- name: Deploy SSL snippet
+  copy:
+    src: snippets/ssl.conf
+    dest: /etc/nginx/snippets/ssl.conf
+  notify: Reload Nginx
+
+- name: Deploy PHP-FPM snippet
+  template:
+    src: snippets/php-fpm.conf.j2
+    dest: /etc/nginx/snippets/php-fpm.conf
+  notify: Reload Nginx
+
+- name: Deploy gzip snippet
+  copy:
+    src: snippets/gzip.conf
+    dest: /etc/nginx/snippets/gzip.conf
+  notify: Reload Nginx
+
+- name: Generate DH parameters
+  command: openssl dhparam -out /etc/nginx/dhparam.pem 2048
+  args:
+    creates: /etc/nginx/dhparam.pem
+
+- name: Remove default nginx site
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/nginx/sites-enabled/default
+    - /etc/nginx/sites-available/default
+  notify: Reload Nginx
+
+- name: Ensure Nginx is started and enabled
+  service:
+    name: nginx
+    state: started
+    enabled: yes

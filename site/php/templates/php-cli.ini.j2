@@ -1,0 +1,28 @@
+[PHP]
+engine                          = On
+short_open_tag                  = Off
+expose_php                      = Off
+display_errors                  = On
+log_errors                      = On
+error_log                       = /var/log/php{{ php_version }}-cli-errors.log
+error_reporting                 = E_ALL
+max_execution_time              = 0
+max_input_time                  = -1
+memory_limit                    = 512M
+file_uploads                    = On
+upload_max_filesize             = 512M
+post_max_size                   = 512M
+allow_url_fopen                 = On
+allow_url_include               = Off
+date.timezone                   = {{ system_timezone }}
+realpath_cache_size             = 4096k
+realpath_cache_ttl              = 600
+
+[opcache]
+opcache.enable                  = 1
+opcache.enable_cli              = 1
+opcache.memory_consumption      = 64
+opcache.interned_strings_buffer = 8
+opcache.max_accelerated_files   = 10000
+opcache.validate_timestamps     = 1
+opcache.save_comments           = 1

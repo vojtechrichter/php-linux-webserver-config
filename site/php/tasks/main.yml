@@ -1,0 +1,93 @@
+---
+- name: Install prerequisites
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - software-properties-common
+      - lsb-release
+      - gnupg2
+      - libyaml-dev
+    state: present
+
+- name: Add Ondrej PHP PPA (Ubuntu)
+  apt_repository:
+    repo: ppa:ondrej/php
+    state: present
+  when: ansible_distribution == 'Ubuntu'
+
+- name: Add Sury GPG key (Debian)
+  apt_key:
+    url: https://packages.sury.org/php/apt.gpg
+    state: present
+  when: ansible_distribution == 'Debian'
+
+- name: Add Sury repo (Debian)
+  apt_repository:
+    repo: "deb https://packages.sury.org/php/ {{ ansible_distribution_release }} main"
+    state: present
+    filename: php
+  when: ansible_distribution == 'Debian'
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+
+- name: Install PHP {{ php_version }} and extensions
+  apt:
+    name: "{{ php_extensions_package }}"
+    state: present
+
+- name: Install PECL build dependencies
+  apt:
+    name:
+      - libyaml-dev
+      - build-essential
+    state: present
+
+- name: Install PECL extensions
+  command: pecl install {{ item }}
+  loop: "{{ php_extensions_pecl }}"
+  register: pecl_install
+  changed_when: "'already installed' not in pecl_install.stdout"
+
+- name: Enable PECL yaml extension ini
+  copy:
+    dest: /etc/php/{{ php_version }}/mods-available/yaml.ini
+    content: "extension=yaml.so\n"
+    mode: '0644'
+  notify: Restart PHP-FPM
+
+- name: Enable yaml for FPM and CLI
+  command: phpenmod -v {{ php_version }} -s {{ item }} yaml
+  loop:
+    - fpm
+    - cli
+  changed_when: false
+  notify: Restart PHP-FPM
+
+- name: Deploy php.ini for FPM
+  template:
+    src: php.ini.j2
+    dest: /etc/php/{{ php_version }}/fpm/php.ini
+    mode: '0644'
+  notify: Restart PHP-FPM
+
+- name: Deploy php.ini for CLI
+  template:
+    src: php-cli.ini.j2
+    dest: /etc/php/{{ php_version }}/cli/php.ini
+    mode: '0644'
+
+- name: Deploy PHP-FPM pool config
+  template:
+    src: www.conf.j2
+    dest: /etc/php/{{ php_version }}/fpm/pool.d/www.conf
+    mode: '0644'
+  notify: Restart PHP-FPM
+
+- name: Ensure PHP-FPM is started and enabled
+  service:
+    name: php{{ php_version }}-fpm
+    state: started
+    enabled: yes

@@ -1,0 +1,13 @@
+---
+- name: Full VPS Setup
+  hosts: all
+  become: yes
+  
+  vars_files:
+     - vars.yml
+     
+  roles:
+     - security
+     - postgres
+     - nginx
+     - php

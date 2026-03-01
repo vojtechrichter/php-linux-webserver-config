@@ -1,0 +1,48 @@
+---
+# -- SSH ----------------------------------------------------------------
+deploy_user: deploy
+deploy_user_password: "CHANGE_ME"
+ssh_port: 22
+allowed_ssh_ips: []
+
+# -- Firewall -----------------------------------------------------------
+ufw_allowed_ports:
+  - { port: "{{ ssh_port }}", proto: tcp }
+  - { port: "80", proto: tcp }
+  - { port: "443", proto: tcp }
+
+# -- PostgreSQL ---------------------------------------------------------
+postgres_version: 16
+postgres_databases:
+  - name: master
+postgres_users:
+  - name: root
+    password: root
+    db: master
+    priv: ALL
+
+# -- PHP ----------------------------------------------------------------
+php_version: "8.4"
+php_extensions_package:
+  - php8.4-curl
+  - php8.4-mbstring
+  - php8.4-pgsql
+  - php8.4-xml
+  - php8.4-zip
+  - php8.4-sockets
+  - php8.4-opcache
+  - php8.4-intl
+  - php8.4-fpm
+  - php8.4-dev
+  - php-pear
+  
+php_extensions_pecl:
+  - yaml
+
+# -- Nginx --------------------------------------------------------------
+nginx_worker_processes: auto
+nginx_worker_connections: 1024
+server_names_hash_bucket_size: 64
+
+# -- System -------------------------------------------------------------
+system_timezone: UTC
